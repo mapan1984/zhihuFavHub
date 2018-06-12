@@ -29,10 +29,14 @@
 
 ``` txt
 [Unit]
-Description=zhihu favlist hub
+Description=zhihu favlist hub service
+After=network.target
 
 [Service]
-ExecStart=/bin/python3 /path/to/client.py
+ExecStart=/usr/bin/python3.6 /path/to/client.py
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 启动/查看状态/关闭服务：
@@ -45,11 +49,11 @@ ExecStart=/bin/python3 /path/to/client.py
 
 ``` txt
 [Unit]
-Description=zhihu favlist hub
+Description=timer for zhihu favlist hub service
 
 [Timer]
-//OnUnitActiveSec=6h
-OnUnitActiveSec=*-*-* 05:00:00
+# OnUnitActiveSec=6h
+OnCalendar=*-*-* 05:00:00
 Unit=zhihub.service
 
 [Install]

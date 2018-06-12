@@ -1,0 +1,10 @@
+[Unit]
+Description=timer for zhihu favlist hub service
+
+[Timer]
+# OnUnitActiveSec=6h
+OnCalendar=*-*-* 05:00:00
+Unit=zhihub.service
+
+[Install]
+WantedBy=multi-user.target

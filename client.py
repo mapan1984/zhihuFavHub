@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys
+import os
 import json
 import argparse
 import http.cookiejar
@@ -8,7 +8,9 @@ from urllib import parse, request, error
 from pyquery import PyQuery as pq
 
 
-cookie = http.cookiejar.MozillaCookieJar('cookie.txt')
+base_path = os.path.dirname(os.path.abspath(__file__))
+
+cookie = http.cookiejar.MozillaCookieJar(os.path.join(base_path, 'cookie.txt'))
 try:
     cookie.load()
 except IOError:
@@ -39,6 +41,8 @@ def get_collection_url(col_id: str) -> str:
         query = {'page': page}
         query_col_url = col_url + '?' + parse.urlencode(query)
         yield query_col_url
+        if page >= 2:
+            break
         page += 1
 
 
@@ -48,8 +52,15 @@ def get_collection_page(col_url: str) -> str:
         col_url: 收藏夹url
     """
     req = request.Request(col_url, headers=headers)
-    with request.urlopen(req) as response:
+    try:
+        response = request.urlopen(req)
+    except error.HTTPError as err:
+        if err.code == 404:
+            print('Collection page not found!')
+        raise
+    else:
         html = response.read()
+        response.close()
         return html.decode('utf-8')
 
 
@@ -60,11 +71,11 @@ def get_xsrf(html: str) -> str:
     """
     d = pq(html)
     bin_xsrf = d('input[name=_xsrf]').attr('value')
-    print(bin_xsrf)
+    # print(bin_xsrf)
     xsrf = ''
     for i in range(0, len(bin_xsrf), 2):
         xsrf += chr(int(bin_xsrf[i:i + 2], base=16))
-    print(xsrf)
+    # print(xsrf)
     return bin_xsrf
 
 
@@ -94,9 +105,16 @@ def add_answer(ans_id: str, fav_id: str, xsrf: str):
         '_xsrf': xsrf,
     }).encode('ascii')
     req = request.Request(add_url, data, headers)
-    with request.urlopen(req) as response:
+    try:
+        response = request.urlopen(req)
+    except error.HTTPError as err:
+        if err.code == 403:
+            print('Forbidden, check you cookie.txt')
+        raise
+    else:
         # print(response.info())
         res_body = response.read()
+        response.close()
         j = json.loads(res_body.decode('utf-8'))
         print(j)
         return j['r'] == 0
@@ -111,17 +129,8 @@ def merge_collection(col_id: str, fav_id: str):
     print(f'get collection page {col_id}...')
     for col_url in get_collection_url(col_id):
         print(col_url)
-
-        try:
-            colhtml = get_collection_page(col_url)
-        except error.HTTPError as err:
-            if err.code == 404:
-                break
-            else:
-                raise
-
+        colhtml = get_collection_page(col_url)
         xsrf = get_xsrf(colhtml)
-
         headers.update({
             'Referer': col_url
         })
@@ -144,12 +153,6 @@ def merge_all_collections():
     for collection_id in collection_ids:
         try:
             merge_collection(collection_id, favlist_id)
-        except error.HTTPError as err:
-            if err.code == 403:
-                print('Forbidden, check you cookie.txt')
-                break
-            else:
-                raise
         except (KeyboardInterrupt, SystemExit):
             print('stop')
             # save cookie
@@ -162,9 +165,16 @@ def follow(favlist_id):
         'favlist_id': favlist_id
     }).encode('ascii')
     req = request.Request(follow_url, data, headers)
-    with request.urlopen(req) as response:
+    try:
+        response = request.urlopen(req)
+    except error.HTTPError as err:
+        if err.code == 403:
+            print('Forbidden, check you cookie.txt')
+        raise
+    else:
         # print(response.info())
         res_body = response.read()
+        response.close()
         j = json.loads(res_body.decode('utf-8'))
         print(j)
         return j['r'] == 0
@@ -191,14 +201,16 @@ parser.add_argument("-m", "--merge", action="store_true", default=True,
                     help="merge all collections to favlist")
 parser.add_argument("-f", "--follow", action="store_true", default=False,
                     help="follow all collections")
+parser.add_argument("-c", "--config", type=str, default='config.json',
+                    help="select a config file")
 args = parser.parse_args()
 
 
-with open('config.funny.json', 'r', encoding='utf-8') as fd:
-    config = json.load(fd)
-favlist_id = config['favlist_id']
-collection_ids = config['collection_ids']
-
+if args.config:
+    with open(args.config, 'r', encoding='utf-8') as fd:
+        config = json.load(fd)
+    favlist_id = config['favlist_id']
+    collection_ids = config['collection_ids']
 
 if args.follow:
     follow_all_collections()
